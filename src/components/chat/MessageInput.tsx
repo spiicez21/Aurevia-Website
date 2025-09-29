@@ -5,24 +5,26 @@ interface MessageInputProps {
   onSendMessage?: (message: string) => void;
   placeholder?: string;
   isActive?: boolean;
+  disabled?: boolean;
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({ 
   onSendMessage, 
   placeholder = "How can i help you ?",
-  isActive = false
+  isActive = false,
+  disabled = false
 }) => {
   const [message, setMessage] = useState('');
 
   const handleSend = () => {
-    if (message.trim() && onSendMessage) {
+    if (message.trim() && onSendMessage && !disabled) {
       onSendMessage(message.trim());
       setMessage('');
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && !disabled) {
       e.preventDefault();
       handleSend();
     }
@@ -32,43 +34,45 @@ const MessageInput: React.FC<MessageInputProps> = ({
   if (isActive) {
     return (
       <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-gray-800 z-50">
-        <div className="max-w-4xl mx-auto px-6 py-4">
-          <div className="flex items-center gap-3">
+        <div className="max-w-5xl mx-auto px-8 py-4">
+          <div className="flex items-center gap-4">
             {/* Left Add Button */}
-            <div className="w-8 h-8 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
+            <div className="w-10 h-10 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
               <button className="w-full h-full flex items-center justify-center hover:bg-charcoal-light transition-colors rounded-full">
-                <Plus size={14} className="text-text-secondary" />
+                <Plus size={16} className="text-text-secondary" />
               </button>
             </div>
             
             {/* Text Input Container */}
-            <div className="flex-1 h-8 bg-charcoal/90 backdrop-blur-sm rounded-2xl shadow-[0px_4px_15px_rgba(0,0,0,0.65)] px-4 flex items-center border border-gray-700/30 focus-within:border-olive/50 transition-colors duration-200">
+            <div className="flex-1 h-12 bg-charcoal/90 backdrop-blur-sm rounded-2xl shadow-[0px_4px_15px_rgba(0,0,0,0.65)] px-6 flex items-center border border-gray-700/30 focus-within:border-olive/50 transition-colors duration-200">
               <input
                 type="text"
-                placeholder={placeholder}
+                placeholder={disabled ? "Sending..." : placeholder}
                 value={message}
                 onChange={(e) => setMessage(e.target.value)}
                 onKeyPress={handleKeyPress}
-                className="w-full bg-transparent text-text-primary placeholder:text-text-muted text-xs border-none outline-none focus:ring-0 font-cabinet antialiased"
+                disabled={disabled}
+                className="w-full bg-transparent text-text-primary placeholder:text-text-muted text-sm border-none outline-none focus:ring-0 font-cabinet antialiased disabled:opacity-50"
               />
             </div>
             
             {/* Right Action Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
               {/* Lightbulb Button */}
-              <div className="w-8 h-8 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
+              <div className="w-10 h-10 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
                 <button className="w-full h-full flex items-center justify-center hover:bg-charcoal-light transition-colors rounded-full">
-                  <Lightbulb size={12} className="text-text-secondary" />
+                  <Lightbulb size={16} className="text-text-secondary" />
                 </button>
               </div>
               
               {/* Send Button */}
-              <div className="w-8 h-8 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
+              <div className="w-10 h-10 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
                 <button 
                   onClick={handleSend}
-                  className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group"
+                  disabled={disabled}
+                  className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
                 >
-                  <Send size={12} className="text-olive group-hover:text-charcoal" />
+                  <Send size={16} className="text-olive group-hover:text-charcoal" />
                 </button>
               </div>
             </div>
@@ -93,11 +97,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
         <div className="flex-1 h-10 bg-charcoal/90 backdrop-blur-sm rounded-2xl shadow-[0px_4px_15px_rgba(0,0,0,0.65)] px-6 flex items-center border border-gray-700/30 focus-within:border-olive/50 transition-all duration-200">
           <input
             type="text"
-            placeholder={placeholder}
+            placeholder={disabled ? "Sending..." : placeholder}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="w-full bg-transparent text-text-primary placeholder:text-text-muted text-sm border-none outline-none focus:ring-0 font-cabinet antialiased"
+            disabled={disabled}
+            className="w-full bg-transparent text-text-primary placeholder:text-text-muted text-sm border-none outline-none focus:ring-0 font-cabinet antialiased disabled:opacity-50"
           />
         </div>
         
@@ -114,7 +119,8 @@ const MessageInput: React.FC<MessageInputProps> = ({
           <div className="w-10 h-10 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
             <button 
               onClick={handleSend}
-              className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group"
+              disabled={disabled}
+              className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
             >
               <Send size={16} className="text-olive group-hover:text-charcoal" />
             </button>

@@ -1,61 +1,33 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import ChatLayout from '../../components/layout/ChatLayout';
 import WelcomeText from '../../components/chat/WelcomeText';
 import MessageInput from '../../components/chat/MessageInput';
 import ChatContainer, { type ChatMessageData } from '../../components/chat/ChatContainer';
+import { useChat } from '../../hooks/useChat';
 
 const ChatWelcome: React.FC = () => {
-  const [messages, setMessages] = useState<ChatMessageData[]>([]);
-  const [isActive, setIsActive] = useState(false);
-  const [chatTitle, setChatTitle] = useState<string>('');
+  const { 
+    currentChat, 
+    isLoading, 
+    error, 
+    sendMessage 
+  } = useChat();
 
-  const generateAIResponse = (userMessage: string): string => {
-    // Simulate AI response based on user input
-    if (userMessage.toLowerCase().includes('matrix')) {
-      return `**Basic Terms**
-
-• **Element**: Each entry in a matrix (e.g., in AAA, element a12=2a_{1,2}, meaning row 1, column 2).
-• **Row matrix**: A matrix with only 1 row.
-• **Column matrix**: A matrix with only 1 column.
-• **Square matrix**: Number of rows = number of columns (e.g., 3×3).
-• **Diagonal matrix**: Square matrix where all non-diagonal elements are 0.
-• **Identity matrix**: A diagonal matrix with 1s on the main diagonal.
-• **Zero matrix**: All entries are 0.`;
-    }
-    
-    return `I understand you're asking about "${userMessage}". Let me help you with that topic.`;
+  const handleSendMessage = async (message: string) => {
+    await sendMessage(message, true); // Use streaming by default
   };
 
-  const handleSendMessage = (message: string) => {
-    const userMessage: ChatMessageData = {
-      id: Date.now().toString(),
-      message,
-      isUser: true,
-      timestamp: new Date()
-    };
+  // Convert API messages to component format
+  const messages: ChatMessageData[] = currentChat?.messages.map(msg => ({
+    id: msg.id,
+    message: msg.content,
+    isUser: !msg.isBot,
+    timestamp: msg.timestamp,
+    isStreaming: msg.isStreaming
+  })) || [];
 
-    setMessages(prev => [...prev, userMessage]);
-
-    // Set chat title from first message if not already set
-    if (!chatTitle) {
-      setChatTitle(`Chat about ${message}`);
-    }
-
-    // Activate chat mode
-    setIsActive(true);
-
-    // Simulate AI response after a short delay
-    setTimeout(() => {
-      const aiResponse: ChatMessageData = {
-        id: (Date.now() + 1).toString(),
-        message: generateAIResponse(message),
-        isUser: false,
-        timestamp: new Date()
-      };
-
-      setMessages(prev => [...prev, aiResponse]);
-    }, 1000);
-  };
+  const isActive = messages.length > 0;
+  const chatTitle = currentChat?.title || '';
 
   // Update page title when chat becomes active
   useEffect(() => {
@@ -72,11 +44,20 @@ const ChatWelcome: React.FC = () => {
             chatTitle={chatTitle}
             isActive={true}
           />
+          {error && (
+            <div className="mx-8 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm">
+              <strong>Error:</strong> {error}
+              <div className="mt-1 text-xs text-red-400">
+                Make sure the backend server is running on http://localhost:5000
+              </div>
+            </div>
+          )}
           <ChatContainer messages={messages} />
         </ChatLayout>
         <MessageInput 
           onSendMessage={handleSendMessage}
           isActive={true}
+          disabled={isLoading}
         />
       </div>
     );
@@ -85,7 +66,18 @@ const ChatWelcome: React.FC = () => {
   return (
     <ChatLayout>
       <WelcomeText username="Username" />
-      <MessageInput onSendMessage={handleSendMessage} />
+      {error && (
+        <div className="mx-8 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm">
+          <strong>Connection Error:</strong> {error}
+          <div className="mt-1 text-xs text-red-400">
+            Backend server may not be running. You can still chat - it will use local responses.
+          </div>
+        </div>
+      )}
+      <MessageInput 
+        onSendMessage={handleSendMessage} 
+        disabled={isLoading}
+      />
     </ChatLayout>
   );
 };

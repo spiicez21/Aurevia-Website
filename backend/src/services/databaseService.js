@@ -11,18 +11,20 @@ class DatabaseService {
   async connect() {
     try {
       const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/aurevia-chat';
+      console.log(`🔌 Attempting to connect to MongoDB: ${mongoURI}`);
       
       const options = {
         maxPoolSize: 10,
         serverSelectionTimeoutMS: 5000,
         socketTimeoutMS: 45000,
-        bufferMaxEntries: 0,
         bufferCommands: false,
       };
 
+      console.log('🔧 MongoDB connection options:', options);
       this.connection = await mongoose.connect(mongoURI, options);
       
       console.log(`✅ Connected to MongoDB: ${this.connection.connection.host}`);
+      console.log(`📊 Database: ${this.connection.connection.name}`);
       
       // Handle connection events
       mongoose.connection.on('error', (error) => {
@@ -39,7 +41,12 @@ class DatabaseService {
 
       return this.connection;
     } catch (error) {
-      console.error('❌ Failed to connect to MongoDB:', error);
+      console.error('❌ Failed to connect to MongoDB:');
+      console.error('   Error name:', error.name);
+      console.error('   Error message:', error.message);
+      if (error.code) {
+        console.error('   Error code:', error.code);
+      }
       throw error;
     }
   }

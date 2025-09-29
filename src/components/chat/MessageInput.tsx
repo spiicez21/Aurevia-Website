@@ -4,11 +4,13 @@ import { Plus, Lightbulb, Send } from 'lucide-react';
 interface MessageInputProps {
   onSendMessage?: (message: string) => void;
   placeholder?: string;
+  isActive?: boolean;
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({ 
   onSendMessage, 
-  placeholder = "How can i help you ?" 
+  placeholder = "How can i help you ?",
+  isActive = false
 }) => {
   const [message, setMessage] = useState('');
 
@@ -26,6 +28,57 @@ const MessageInput: React.FC<MessageInputProps> = ({
     }
   };
 
+  // Active chat mode - bottom positioned input
+  if (isActive) {
+    return (
+      <div className="fixed bottom-0 left-0 right-0 bg-background border-t border-gray-800 z-50">
+        <div className="max-w-4xl mx-auto px-6 py-4">
+          <div className="flex items-center gap-3">
+            {/* Left Add Button */}
+            <div className="w-8 h-8 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
+              <button className="w-full h-full flex items-center justify-center hover:bg-charcoal-light transition-colors rounded-full">
+                <Plus size={14} className="text-text-secondary" />
+              </button>
+            </div>
+            
+            {/* Text Input Container */}
+            <div className="flex-1 h-8 bg-charcoal/90 backdrop-blur-sm rounded-2xl shadow-[0px_4px_15px_rgba(0,0,0,0.65)] px-4 flex items-center border border-gray-700/30 focus-within:border-olive/50 transition-colors duration-200">
+              <input
+                type="text"
+                placeholder={placeholder}
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyPress={handleKeyPress}
+                className="w-full bg-transparent text-text-primary placeholder:text-text-muted text-xs border-none outline-none focus:ring-0 font-cabinet antialiased"
+              />
+            </div>
+            
+            {/* Right Action Buttons */}
+            <div className="flex items-center gap-2">
+              {/* Lightbulb Button */}
+              <div className="w-8 h-8 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
+                <button className="w-full h-full flex items-center justify-center hover:bg-charcoal-light transition-colors rounded-full">
+                  <Lightbulb size={12} className="text-text-secondary" />
+                </button>
+              </div>
+              
+              {/* Send Button */}
+              <div className="w-8 h-8 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
+                <button 
+                  onClick={handleSend}
+                  className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group"
+                >
+                  <Send size={12} className="text-olive group-hover:text-charcoal" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Welcome mode - centered input
   return (
     <div className="w-full max-w-2xl">
       <div className="flex items-center gap-3">
@@ -37,14 +90,14 @@ const MessageInput: React.FC<MessageInputProps> = ({
         </div>
         
         {/* Text Input Container - Center */}
-        <div className="flex-1 h-10 bg-charcoal rounded-2xl shadow-[0px_4px_15px_rgba(0,0,0,0.65)] px-6 flex items-center">
+        <div className="flex-1 h-10 bg-charcoal/90 backdrop-blur-sm rounded-2xl shadow-[0px_4px_15px_rgba(0,0,0,0.65)] px-6 flex items-center border border-gray-700/30 focus-within:border-olive/50 transition-all duration-200">
           <input
             type="text"
             placeholder={placeholder}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             onKeyPress={handleKeyPress}
-            className="w-full bg-transparent text-text-primary placeholder:text-text-muted text-sm border-none outline-none focus:ring-0"
+            className="w-full bg-transparent text-text-primary placeholder:text-text-muted text-sm border-none outline-none focus:ring-0 font-cabinet antialiased"
           />
         </div>
         

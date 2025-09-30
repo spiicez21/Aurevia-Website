@@ -5,11 +5,21 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
 class ApiService {
   private baseURL: string;
   private token: string | null = null;
+  private guestId: string | null = null;
 
   constructor() {
     this.baseURL = API_BASE_URL;
     // Get token from localStorage if available
     this.token = localStorage.getItem('auth_token');
+    // Get or create guest ID for anonymous users
+    this.guestId = localStorage.getItem('guest_id') || this.generateGuestId();
+  }
+
+  // Generate a unique guest ID
+  private generateGuestId(): string {
+    const guestId = `guest_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    localStorage.setItem('guest_id', guestId);
+    return guestId;
   }
 
   // Set authentication token
@@ -42,6 +52,8 @@ class ApiService {
 
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
+    } else if (this.guestId) {
+      headers['X-Guest-Id'] = this.guestId;
     }
 
     const response = await fetch(url, {
@@ -128,6 +140,8 @@ class ApiService {
 
     if (this.token) {
       headers.Authorization = `Bearer ${this.token}`;
+    } else if (this.guestId) {
+      headers['X-Guest-Id'] = this.guestId;
     }
 
     const response = await fetch(url, {

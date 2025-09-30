@@ -27,8 +27,8 @@ export const useChat = () => {
   const loadChatHistory = useCallback(async () => {
     try {
       const response = await apiService.getChats(20);
-      if (response.success && response.data) {
-        setChatHistory(response.data);
+      if (response.success && response.data && response.data.chats) {
+        setChatHistory(response.data.chats);
       }
     } catch (err) {
       console.warn('Could not load chat history:', err);
@@ -56,10 +56,13 @@ export const useChat = () => {
       };
 
       // Add streaming message placeholder
-      setCurrentChat(prev => prev ? {
-        ...prev,
-        messages: [...prev.messages, streamingMessage],
-      } : null);
+      setCurrentChat(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          messages: [...(Array.isArray(prev.messages) ? prev.messages : []), streamingMessage],
+        };
+      });
 
       let buffer = '';
       
@@ -84,7 +87,7 @@ export const useChat = () => {
                 setCurrentChat(prev => {
                   if (!prev) return null;
                   
-                  const messages = [...prev.messages];
+                  const messages = [...(Array.isArray(prev.messages) ? prev.messages : [])];
                   const lastIndex = messages.length - 1;
                   
                   if (messages[lastIndex]?.id === streamingMessage.id) {
@@ -103,7 +106,7 @@ export const useChat = () => {
                 setCurrentChat(prev => {
                   if (!prev) return null;
                   
-                  const messages = [...prev.messages];
+                  const messages = [...(Array.isArray(prev.messages) ? prev.messages : [])];
                   const lastIndex = messages.length - 1;
                   
                   if (messages[lastIndex]?.isStreaming) {
@@ -124,19 +127,20 @@ export const useChat = () => {
       console.error('Streaming error:', err);
       // Fallback to regular message sending
       const response = await apiService.sendMessage(chatId, message, false);
-      if (response.success && response.data) {
+      if (response.success && response.data && response.data.assistantMessage) {
+        const assistantMsg = response.data.assistantMessage;
         const botMessage: Message = {
-          id: response.data._id,
-          content: response.data.content,
+          id: assistantMsg._id,
+          content: assistantMsg.content,
           isBot: true,
-          timestamp: new Date(response.data.createdAt),
+          timestamp: new Date(assistantMsg.createdAt),
         };
 
         setCurrentChat(prev => {
           if (!prev) return null;
           
           // Replace the streaming message with the final response
-          const messages = [...prev.messages];
+          const messages = [...(Array.isArray(prev.messages) ? prev.messages : [])];
           const lastIndex = messages.length - 1;
           
           if (messages[lastIndex]?.isStreaming) {
@@ -166,17 +170,18 @@ export const useChat = () => {
       
       const response = await apiService.createChat({ title });
       
-      if (response.success && response.data) {
+      if (response.success && response.data && response.data.chat) {
+        const chatData = response.data.chat;
         const newChat: Chat = {
-          id: response.data._id,
-          title: response.data.title,
+          id: chatData._id,
+          title: chatData.title,
           messages: [],
-          createdAt: new Date(response.data.createdAt),
-          updatedAt: new Date(response.data.updatedAt),
+          createdAt: new Date(chatData.createdAt),
+          updatedAt: new Date(chatData.updatedAt),
         };
         
         setCurrentChat(newChat);
-        setChatHistory(prev => [newChat, ...prev]);
+        setChatHistory(prev => [newChat, ...(Array.isArray(prev) ? prev : [])]);
         return newChat;
       } else {
         throw new Error('Failed to create chat');
@@ -191,12 +196,24 @@ export const useChat = () => {
 
   // Send a message and get AI response
   const sendMessage = useCallback(async (content: string, stream = true) => {
-    if (!currentChat) {
+    let chatToUse = currentChat;
+    
+    if (!chatToUse) {
       const newChat = await createNewChat(content);
-      if (!newChat) return;
+      if (!newChat) {
+        return;
+      }
+      chatToUse = newChat;
+      // Update currentChat state with the new chat
+      setCurrentChat(newChat);
+    }
+    
+    if (!chatToUse || !chatToUse.id) {
+      console.error('No valid chat available');
+      setError('Failed to create or access chat');
+      return;
     }
 
-    const chatToUse = currentChat!;
     const userMessage: Message = {
       id: Date.now().toString(),
       content,
@@ -205,10 +222,13 @@ export const useChat = () => {
     };
 
     // Add user message immediately
-    setCurrentChat(prev => prev ? {
-      ...prev,
-      messages: [...prev.messages, userMessage],
-    } : null);
+    setCurrentChat(prev => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        messages: [...(Array.isArray(prev.messages) ? prev.messages : []), userMessage],
+      };
+    });
 
     try {
       setIsLoading(true);
@@ -220,18 +240,22 @@ export const useChat = () => {
       } else {
         // Handle regular response
         const response = await apiService.sendMessage(chatToUse.id, content, false);
-        if (response.success && response.data) {
+        if (response.success && response.data && response.data.assistantMessage) {
+          const assistantMsg = response.data.assistantMessage;
           const botMessage: Message = {
-            id: response.data._id,
-            content: response.data.content,
+            id: assistantMsg._id,
+            content: assistantMsg.content,
             isBot: true,
-            timestamp: new Date(response.data.createdAt),
+            timestamp: new Date(assistantMsg.createdAt),
           };
 
-          setCurrentChat(prev => prev ? {
-            ...prev,
-            messages: [...prev.messages, botMessage],
-          } : null);
+          setCurrentChat(prev => {
+            if (!prev) return null;
+            return {
+              ...prev,
+              messages: [...(Array.isArray(prev.messages) ? prev.messages : []), botMessage],
+            };
+          });
         }
       }
     } catch (err) {
@@ -250,18 +274,19 @@ export const useChat = () => {
       setError(null);
       
       const response = await apiService.getChat(chatId);
-      if (response.success && response.data) {
+      if (response.success && response.data && response.data.chat) {
+        const chatData = response.data.chat;
         const chat: Chat = {
-          id: response.data._id,
-          title: response.data.title,
-          messages: response.data.messages.map((msg: { _id: string; content: string; sender: string; createdAt: string }) => ({
+          id: chatData._id,
+          title: chatData.title,
+          messages: chatData.messages.map((msg: { _id: string; content: string; sender: string; createdAt: string }) => ({
             id: msg._id,
             content: msg.content,
             isBot: msg.sender === 'assistant',
             timestamp: new Date(msg.createdAt),
           })),
-          createdAt: new Date(response.data.createdAt),
-          updatedAt: new Date(response.data.updatedAt),
+          createdAt: new Date(chatData.createdAt),
+          updatedAt: new Date(chatData.updatedAt),
         };
         
         setCurrentChat(chat);

@@ -8,10 +8,13 @@ const messageSchema = new mongoose.Schema({
     index: true
   },
   user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: mongoose.Schema.Types.Mixed, // Can be ObjectId or string for guests
     required: [true, 'User is required'],
     index: true
+  },
+  isGuest: {
+    type: Boolean,
+    default: false
   },
   content: {
     type: String,

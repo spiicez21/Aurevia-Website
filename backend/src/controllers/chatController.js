@@ -1,7 +1,8 @@
 import { body, param, query, validationResult } from 'express-validator';
-import { Chat, Message } from '../models/index.js';
+import { Chat, Message, User } from '../models/index.js';
 import { ollamaService } from '../services/index.js';
 import { asyncHandler } from '../middleware/index.js';
+import { v4 as uuidv4 } from 'uuid';
 
 /**
  * Create new chat
@@ -44,10 +45,26 @@ export const createChat = [
 
     const { title, description, settings } = req.body;
 
+    // Handle both authenticated and anonymous users
+    let userId = req.user?._id;
+    
+    if (!userId) {
+      // Create or find guest user
+      let guestId = req.headers['x-guest-id'];
+      if (!guestId) {
+        guestId = `guest_${uuidv4()}`;
+      }
+      
+      // For anonymous users, use a special guest identifier
+      userId = guestId;
+    }
+
     const chat = new Chat({
-      user: req.user._id,
+      user: userId,
       title,
       description,
+      isGuest: !req.user,
+      guestId: !req.user ? userId : undefined,
       settings: {
         ...settings,
         model: 'gemma2:2b'
@@ -60,7 +77,8 @@ export const createChat = [
       success: true,
       message: 'Chat created successfully',
       data: {
-        chat
+        chat,
+        ...(chat.isGuest && { guestId: chat.guestId })
       }
     });
   })
@@ -99,7 +117,28 @@ export const getChats = [
       ...(pinned !== undefined && { pinned: pinned === 'true' })
     };
 
-    const chats = await Chat.findUserChats(req.user._id, options);
+    // Handle both authenticated and anonymous users
+    let userId = req.user?._id;
+    let isGuest = false;
+    
+    if (!userId) {
+      const guestId = req.headers['x-guest-id'];
+      if (!guestId) {
+        return res.json({
+          success: true,
+          data: {
+            chats: [],
+            count: 0
+          }
+        });
+      }
+      userId = guestId;
+      isGuest = true;
+    }
+
+    const chats = isGuest 
+      ? await Chat.find({ guestId: userId, isActive: true }).sort({ updatedAt: -1 }).limit(options.limit)
+      : await Chat.findUserChats(userId, options);
 
     res.json({
       success: true,
@@ -140,11 +179,36 @@ export const getChat = [
     const { chatId } = req.params;
     const { messageLimit } = req.query;
 
-    const chat = await Chat.findChatWithMessages(
-      chatId, 
-      req.user._id, 
-      parseInt(messageLimit) || 50
-    );
+    // Handle both authenticated and anonymous users
+    let userId = req.user?._id;
+    let isGuest = false;
+    
+    if (!userId) {
+      const guestId = req.headers['x-guest-id'];
+      if (!guestId) {
+        return res.status(404).json({
+          success: false,
+          message: 'Chat not found',
+          code: 'CHAT_NOT_FOUND'
+        });
+      }
+      userId = guestId;
+      isGuest = true;
+    }
+
+    const chat = isGuest
+      ? await Chat.findOne({ _id: chatId, guestId: userId, isActive: true }).populate({
+          path: 'messages',
+          options: { 
+            sort: { createdAt: -1 },
+            limit: parseInt(messageLimit) || 50
+          }
+        })
+      : await Chat.findChatWithMessages(
+          chatId, 
+          userId, 
+          parseInt(messageLimit) || 50
+        );
 
     if (!chat) {
       return res.status(404).json({
@@ -202,12 +266,27 @@ export const sendMessage = [
     const { chatId } = req.params;
     const { content, stream = false } = req.body;
 
-    // Verify chat exists and belongs to user
-    const chat = await Chat.findOne({
-      _id: chatId,
-      user: req.user._id,
-      isActive: true
-    });
+    // Handle both authenticated and anonymous users
+    let userId = req.user?._id;
+    let isGuest = false;
+    
+    if (!userId) {
+      const guestId = req.headers['x-guest-id'];
+      if (!guestId) {
+        return res.status(401).json({
+          success: false,
+          message: 'Guest ID required for anonymous users',
+          code: 'GUEST_ID_REQUIRED'
+        });
+      }
+      userId = guestId;
+      isGuest = true;
+    }
+
+    // Verify chat exists and belongs to user/guest
+    const chat = isGuest
+      ? await Chat.findOne({ _id: chatId, guestId: userId, isActive: true })
+      : await Chat.findOne({ _id: chatId, user: userId, isActive: true });
 
     if (!chat) {
       return res.status(404).json({
@@ -220,9 +299,10 @@ export const sendMessage = [
     // Create user message
     const userMessage = new Message({
       chat: chatId,
-      user: req.user._id,
+      user: userId,
       content,
-      role: 'user'
+      role: 'user',
+      isGuest: isGuest
     });
 
     await userMessage.save();
@@ -256,10 +336,11 @@ export const sendMessage = [
           // Create assistant message with pending status
           const assistantMessage = new Message({
             chat: chatId,
-            user: req.user._id,
+            user: userId,
             content: '',
             role: 'assistant',
             status: 'processing',
+            isGuest: isGuest,
             metadata: {
               model: chat.settings.model,
               temperature: chat.settings.temperature
@@ -339,9 +420,10 @@ export const sendMessage = [
         // Create assistant message
         const assistantMessage = new Message({
           chat: chatId,
-          user: req.user._id,
+          user: userId,
           content: completion.content,
           role: 'assistant',
+          isGuest: isGuest,
           metadata: {
             model: completion.model,
             tokens: completion.usage,
@@ -367,10 +449,11 @@ export const sendMessage = [
       // Create error message
       const errorMessage = new Message({
         chat: chatId,
-        user: req.user._id,
+        user: userId,
         content: 'Sorry, I encountered an error processing your message. Please try again.',
         role: 'assistant',
         status: 'failed',
+        isGuest: isGuest,
         metadata: {
           error: error.message
         }

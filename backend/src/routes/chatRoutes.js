@@ -1,5 +1,5 @@
 import express from 'express';
-import { authenticate, chatRateLimit, aiRateLimit } from '../middleware/index.js';
+import { authenticate, optionalAuth, chatRateLimit, aiRateLimit } from '../middleware/index.js';
 import {
   createChat,
   getChats,
@@ -11,8 +11,8 @@ import {
 
 const router = express.Router();
 
-// Apply authentication to all chat routes
-router.use(authenticate);
+// Apply optional authentication to allow both authenticated and anonymous users
+router.use(optionalAuth);
 
 // Chat management routes
 router.get('/', chatRateLimit, getChats);

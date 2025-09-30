@@ -2,9 +2,17 @@ import mongoose from 'mongoose';
 
 const chatSchema = new mongoose.Schema({
   user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
+    type: mongoose.Schema.Types.Mixed, // Can be ObjectId or string for guests
     required: [true, 'User is required'],
+    index: true
+  },
+  isGuest: {
+    type: Boolean,
+    default: false
+  },
+  guestId: {
+    type: String,
+    sparse: true, // Only index if present
     index: true
   },
   title: {

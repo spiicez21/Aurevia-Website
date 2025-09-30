@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import ChatLayout from '../../components/layout/ChatLayout';
+import Sidebar from '../../components/layout/Sidebar';
 import WelcomeText from '../../components/chat/WelcomeText';
 import MessageInput from '../../components/chat/MessageInput';
 import ChatContainer, { type ChatMessageData } from '../../components/chat/ChatContainer';
@@ -38,46 +39,55 @@ const ChatWelcome: React.FC = () => {
 
   if (isActive) {
     return (
-      <div className="min-h-screen bg-background flex flex-col pb-20">
-        <ChatLayout>
-          <WelcomeText 
-            chatTitle={chatTitle}
+      <div className="min-h-screen bg-background flex flex-col">
+        <div className="flex-1 flex flex-col">
+          <div className="relative w-full min-h-screen bg-bg-primary">
+            <Sidebar />
+            <main className="flex flex-col w-full min-h-screen px-4 sm:px-6 lg:px-8">
+              <WelcomeText 
+                chatTitle={chatTitle}
+                isActive={true}
+              />
+              {error && (
+                <div className="mx-4 sm:mx-6 lg:mx-8 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm">
+                  <strong>Error:</strong> {error}
+                  <div className="mt-1 text-xs text-red-400">
+                    Make sure the backend server is running on http://localhost:5000
+                  </div>
+                </div>
+              )}
+              <ChatContainer messages={messages} />
+            </main>
+          </div>
+        </div>
+        <div className="sticky bottom-0 bg-background/95 backdrop-blur-sm border-t border-gray-800/50 pb-safe">
+          <MessageInput 
+            onSendMessage={handleSendMessage}
             isActive={true}
+            disabled={isLoading}
           />
-          {error && (
-            <div className="mx-8 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm">
-              <strong>Error:</strong> {error}
-              <div className="mt-1 text-xs text-red-400">
-                Make sure the backend server is running on http://localhost:5000
-              </div>
-            </div>
-          )}
-          <ChatContainer messages={messages} />
-        </ChatLayout>
-        <MessageInput 
-          onSendMessage={handleSendMessage}
-          isActive={true}
-          disabled={isLoading}
-        />
+        </div>
       </div>
     );
   }
 
   return (
     <ChatLayout>
-      <WelcomeText username="Username" />
-      {error && (
-        <div className="mx-8 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm">
-          <strong>Connection Error:</strong> {error}
-          <div className="mt-1 text-xs text-red-400">
-            Backend server may not be running. You can still chat - it will use local responses.
+      <div className="flex flex-col items-center justify-center w-full max-w-4xl mx-auto">
+        <WelcomeText username="Username" />
+        {error && (
+          <div className="mx-8 mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-300 text-sm max-w-2xl">
+            <strong>Connection Error:</strong> {error}
+            <div className="mt-1 text-xs text-red-400">
+              Backend server may not be running. You can still chat - it will use local responses.
+            </div>
           </div>
-        </div>
-      )}
-      <MessageInput 
-        onSendMessage={handleSendMessage} 
-        disabled={isLoading}
-      />
+        )}
+        <MessageInput 
+          onSendMessage={handleSendMessage} 
+          disabled={isLoading}
+        />
+      </div>
     </ChatLayout>
   );
 };

@@ -9,7 +9,7 @@ const ChatLayout: React.FC<ChatLayoutProps> = ({ children }) => {
   return (
     <div className="relative w-full min-h-screen bg-bg-primary">
       <Sidebar />
-      <main className="flex flex-col justify-center items-center w-full min-h-screen px-8">
+      <main className="flex flex-col justify-center items-center w-full min-h-screen px-4 sm:px-6 lg:px-8">
         {children}
       </main>
     </div>

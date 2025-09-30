@@ -22,8 +22,8 @@ const WelcomeText: React.FC<WelcomeTextProps> = ({
   }
 
   return (
-    <div className="flex flex-col items-center mb-16">
-      <h1 className="text-4xl md:text-5xl lg:text-6xl font-light text-center">
+    <div className="flex flex-col items-center justify-center mb-16 w-full">
+      <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-light text-center px-4">
         <span className="font-cabinet text-text-secondary">Hey, </span>
         <span className="font-zodiak text-olive">{username} !</span>
       </h1>

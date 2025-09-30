@@ -27,15 +27,15 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
   if (isUser) {
     // User message: Sleek bubble on the right
     return (
-      <div className="mb-6 animate-slide-up flex justify-end pr-4">
-        <div className="max-w-[65%]">
-          <div className="bg-olive/90 text-white rounded-2xl px-6 py-3 shadow-lg font-cabinet font-medium">
-            <div className="text-sm leading-relaxed whitespace-pre-wrap antialiased">
+      <div className="mb-6 animate-slide-up flex justify-end w-full">
+        <div className="max-w-[85%] sm:max-w-[75%] md:max-w-[65%] lg:max-w-[55%] xl:max-w-[50%]">
+          <div className="bg-olive/90 text-white rounded-2xl rounded-br-md px-4 sm:px-6 py-3 shadow-lg font-cabinet font-medium ml-auto">
+            <div className="text-sm leading-relaxed whitespace-pre-wrap antialiased break-words">
               {message}
             </div>
           </div>
           {timestamp && (
-            <div className="text-xs text-gray-500 mt-1 text-right">
+            <div className="text-xs text-gray-500 mt-1 text-right pr-1">
               {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
           )}
@@ -46,10 +46,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
 
   // AI message: Wide markdown text without bubble (ChatGPT style)
   return (
-    <div className="mb-8 animate-slide-up pl-4">
-      <div className="w-full max-w-none pr-16">
+    <div className="mb-8 animate-slide-up w-full">
+      <div className="w-full max-w-[95%] sm:max-w-[90%] md:max-w-[85%] lg:max-w-[80%] xl:max-w-[75%] pl-2 sm:pl-4">
         <div 
-          className="text-gray-100 font-cabinet leading-relaxed text-sm antialiased"
+          className="text-gray-100 font-cabinet leading-relaxed text-sm antialiased break-words"
           dangerouslySetInnerHTML={{ __html: renderMarkdown(message) }}
         />
         {isStreaming && (
@@ -60,7 +60,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
           </div>
         )}
         {timestamp && !isStreaming && (
-          <div className="text-xs text-gray-500 mt-2">
+          <div className="text-xs text-gray-500 mt-2 pl-1">
             {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         )}

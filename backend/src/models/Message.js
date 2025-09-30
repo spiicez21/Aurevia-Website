@@ -18,9 +18,13 @@ const messageSchema = new mongoose.Schema({
   },
   content: {
     type: String,
-    required: [true, 'Message content is required'],
+    required: function() {
+      // Allow empty content for processing messages (streaming)
+      return this.status !== 'processing';
+    },
     trim: true,
-    maxLength: [10000, 'Message cannot exceed 10000 characters']
+    maxLength: [10000, 'Message cannot exceed 10000 characters'],
+    default: ''
   },
   role: {
     type: String,

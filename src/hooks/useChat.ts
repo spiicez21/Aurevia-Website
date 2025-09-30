@@ -38,14 +38,18 @@ export const useChat = () => {
 
   // Handle streaming response from AI
   const handleStreamingResponse = useCallback(async (chatId: string, message: string) => {
+    console.log('🚀 [DEBUG] Starting streaming response for:', { chatId, message });
     try {
       const response = await apiService.sendStreamingMessage(chatId, message);
+      console.log('📡 [DEBUG] Streaming response received:', { status: response.status, headers: response.headers });
       const reader = response.body?.getReader();
       
       if (!reader) {
+        console.error('❌ [ERROR] Streaming not supported - no reader available');
         throw new Error('Streaming not supported');
       }
 
+      console.log('📖 [DEBUG] Reader created successfully');
       const decoder = new TextDecoder();
       const streamingMessage: Message = {
         id: `streaming-${Date.now()}`,
@@ -55,9 +59,12 @@ export const useChat = () => {
         isStreaming: true,
       };
 
+      console.log('💭 [DEBUG] Created streaming message placeholder:', streamingMessage);
+
       // Add streaming message placeholder
       setCurrentChat(prev => {
         if (!prev) return null;
+        console.log('📝 [DEBUG] Adding streaming message to chat');
         return {
           ...prev,
           messages: [...(Array.isArray(prev.messages) ? prev.messages : []), streamingMessage],
@@ -76,12 +83,23 @@ export const useChat = () => {
         buffer = lines.pop() || '';
         
         for (const line of lines) {
+          console.log('📄 [DEBUG] Processing line:', line);
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
+              console.log('📦 [DEBUG] Parsed streaming data:', data);
               
-              if (data.content) {
-                streamingMessage.content += data.content;
+              if (data.type === 'message_start') {
+                console.log('🚀 [DEBUG] Message started with ID:', data.messageId);
+                streamingMessage.id = data.messageId;
+              }
+              
+              if (data.type === 'content_delta' && data.delta) {
+                streamingMessage.content += data.delta;
+                console.log('✍️ [DEBUG] Updated streaming content:', { 
+                  newContent: data.delta, 
+                  totalLength: streamingMessage.content.length 
+                });
                 
                 // Update the streaming message
                 setCurrentChat(prev => {
@@ -92,13 +110,15 @@ export const useChat = () => {
                   
                   if (messages[lastIndex]?.id === streamingMessage.id) {
                     messages[lastIndex] = { ...streamingMessage };
+                    console.log('🔄 [DEBUG] Updated message in chat');
                   }
                   
                   return { ...prev, messages };
                 });
               }
               
-              if (data.done) {
+              if (data.type === 'message_complete') {
+                console.log('✅ [DEBUG] Streaming completed');
                 // Mark streaming as complete
                 streamingMessage.isStreaming = false;
                 streamingMessage.id = data.messageId || streamingMessage.id;
@@ -111,20 +131,28 @@ export const useChat = () => {
                   
                   if (messages[lastIndex]?.isStreaming) {
                     messages[lastIndex] = { ...streamingMessage };
+                    console.log('🏁 [DEBUG] Final message set:', streamingMessage);
                   }
                   
                   return { ...prev, messages };
                 });
                 break;
               }
+              
+              if (data.type === 'error') {
+                console.error('❌ [ERROR] Streaming error from backend:', data.error);
+                setError(data.error);
+                break;
+              }
             } catch (parseError) {
-              console.warn('Failed to parse streaming data:', parseError);
+              console.error('❌ [ERROR] Failed to parse streaming data:', parseError, 'Line:', line);
             }
           }
         }
       }
     } catch (err) {
-      console.error('Streaming error:', err);
+      console.error('❌ [ERROR] Streaming error:', err);
+      console.log('🔄 [DEBUG] Falling back to regular message sending');
       // Fallback to regular message sending
       const response = await apiService.sendMessage(chatId, message, false);
       if (response.success && response.data && response.data.assistantMessage) {

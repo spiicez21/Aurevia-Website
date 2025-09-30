@@ -14,7 +14,7 @@ const WelcomeText: React.FC<WelcomeTextProps> = ({
   if (isActive && chatTitle) {
     return (
       <div className="text-center py-4 mb-6 animate-fade-in">
-        <h1 className="text-xl md:text-2xl font-cabinet text-olive font-medium tracking-wide">
+        <h1 className="text-xl md:text-2xl font-zodiak font-medium tracking-wide">
           {chatTitle}
         </h1>
       </div>

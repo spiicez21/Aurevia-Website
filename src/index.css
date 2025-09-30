@@ -22,6 +22,7 @@ body {
 .font-zodiak {
   font-family: 'Zodiak', serif;
   font-feature-settings: 'kern' 1, 'liga' 1;
+  color: #C6D86E; /* Always use olive color for Zodiak font */
 }
 
 .font-cabinet {

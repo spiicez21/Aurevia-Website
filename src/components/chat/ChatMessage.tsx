@@ -29,7 +29,7 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
     return (
       <div className="mb-6 animate-slide-up flex justify-end w-full">
         <div className="max-w-[85%] sm:max-w-[75%] md:max-w-[65%] lg:max-w-[55%] xl:max-w-[50%]">
-          <div className="bg-olive/90 text-white rounded-2xl rounded-br-md px-4 sm:px-6 py-3 shadow-lg font-cabinet font-medium ml-auto">
+          <div className="text-white rounded-2xl rounded-br-md px-4 sm:px-6 py-3 shadow-lg font-cabinet font-medium ml-auto" style={{backgroundColor: '#8BA034'}}>
             <div className="text-sm leading-relaxed whitespace-pre-wrap antialiased break-words">
               {message}
             </div>

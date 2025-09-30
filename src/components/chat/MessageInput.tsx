@@ -72,7 +72,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
                   disabled={disabled}
                   className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
                 >
-                  <Send size={16} className="text-olive group-hover:text-charcoal" />
+                  <Send size={16} className="text-olive group-hover:text-charcoal" style={{color: '#C6D86E'}} />
                 </button>
               </div>
             </div>
@@ -122,7 +122,7 @@ const MessageInput: React.FC<MessageInputProps> = ({
               disabled={disabled}
               className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
             >
-              <Send size={16} className="text-olive group-hover:text-charcoal" />
+              <Send size={16} className="text-olive group-hover:text-charcoal" style={{color: '#C6D86E'}} />
             </button>
           </div>
         </div>

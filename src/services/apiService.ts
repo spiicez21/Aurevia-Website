@@ -131,7 +131,7 @@ class ApiService {
   }
 
   // Streaming message handler
-  async sendStreamingMessage(chatId: string, message: string) {
+  async sendStreamingMessage(chatId: string, message: string, signal?: AbortSignal) {
     const url = `${this.baseURL}/chats/${chatId}/messages`;
     
     const headers: Record<string, string> = {
@@ -148,6 +148,7 @@ class ApiService {
       method: 'POST',
       headers,
       body: JSON.stringify({ content: message, stream: true }),
+      signal, // Add abort signal support
     });
 
     if (!response.ok) {

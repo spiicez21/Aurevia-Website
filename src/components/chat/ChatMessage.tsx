@@ -57,9 +57,10 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
     );
   }
 
-  // AI message: Wide markdown text without bubble (ChatGPT style)
+  // AI message: Clean markdown text without decorations
   return (
     <div className="mb-8 animate-slide-up w-full">
+      {/* Message Content */}
       <div className="w-full max-w-[95%] sm:max-w-[90%] md:max-w-[85%] lg:max-w-[80%] xl:max-w-[75%] pl-2 sm:pl-4">
         <div className="text-gray-100 font-cabinet leading-relaxed text-sm antialiased break-words">
           {message.trim() ? (
@@ -73,18 +74,27 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
             <span className="text-gray-500 italic">Generating response...</span>
           )}
         </div>
+        
+        {/* Streaming Indicator */}
         {isStreaming && (
-          <div className="inline-flex items-center mt-2">
+          <div className="inline-flex items-center mt-3">
             <div className="w-2 h-2 bg-olive rounded-full animate-pulse mr-1"></div>
             <div className="w-2 h-2 bg-olive rounded-full animate-pulse mr-1" style={{ animationDelay: '200ms' }}></div>
             <div className="w-2 h-2 bg-olive rounded-full animate-pulse" style={{ animationDelay: '400ms' }}></div>
           </div>
         )}
+        
+        {/* Timestamp */}
         {timestamp && !isStreaming && (
-          <div className="text-xs text-gray-500 mt-2 pl-1">
+          <div className="text-xs text-gray-500 mt-2">
             {timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </div>
         )}
+      </div>
+
+      {/* Bottom Separator */}
+      <div className="mt-6 w-full">
+        <div className="w-full h-px bg-gradient-to-r from-transparent via-gray-800/50 to-transparent"></div>
       </div>
     </div>
   );

@@ -1,18 +1,22 @@
 import React, { useState } from 'react';
-import { Plus, Lightbulb, Send } from 'lucide-react';
+import { Plus, Lightbulb, Send, Square } from 'lucide-react';
 
 interface MessageInputProps {
   onSendMessage?: (message: string) => void;
+  onStopGeneration?: () => void;
   placeholder?: string;
   isActive?: boolean;
   disabled?: boolean;
+  isStreaming?: boolean;
 }
 
 const MessageInput: React.FC<MessageInputProps> = ({ 
-  onSendMessage, 
+  onSendMessage,
+  onStopGeneration, 
   placeholder = "How can i help you ?",
   isActive = false,
-  disabled = false
+  disabled = false,
+  isStreaming = false
 }) => {
   const [message, setMessage] = useState('');
 
@@ -20,6 +24,12 @@ const MessageInput: React.FC<MessageInputProps> = ({
     if (message.trim() && onSendMessage && !disabled) {
       onSendMessage(message.trim());
       setMessage('');
+    }
+  };
+
+  const handleStop = () => {
+    if (onStopGeneration && isStreaming) {
+      onStopGeneration();
     }
   };
 
@@ -65,15 +75,26 @@ const MessageInput: React.FC<MessageInputProps> = ({
                 </button>
               </div>
               
-              {/* Send Button */}
+              {/* Send/Stop Button */}
               <div className="w-10 h-10 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
-                <button 
-                  onClick={handleSend}
-                  disabled={disabled}
-                  className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
-                >
-                  <Send size={16} className="text-olive group-hover:text-charcoal" style={{color: '#C6D86E'}} />
-                </button>
+                {isStreaming ? (
+                  <button 
+                    onClick={handleStop}
+                    className="w-full h-full flex items-center justify-center hover:bg-red-500 hover:shadow-red-500/20 transition-all duration-200 rounded-full group"
+                    title="Stop generating"
+                  >
+                    <Square size={14} className="text-red-400 group-hover:text-white fill-current" />
+                  </button>
+                ) : (
+                  <button 
+                    onClick={handleSend}
+                    disabled={disabled || !message.trim()}
+                    className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
+                    title="Send message"
+                  >
+                    <Send size={16} className="text-olive group-hover:text-charcoal" style={{color: '#C6D86E'}} />
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -115,15 +136,26 @@ const MessageInput: React.FC<MessageInputProps> = ({
             </button>
           </div>
           
-          {/* Send Button */}
+          {/* Send/Stop Button */}
           <div className="w-10 h-10 bg-charcoal rounded-full shadow-[0px_4px_15px_rgba(0,0,0,0.65)] flex items-center justify-center">
-            <button 
-              onClick={handleSend}
-              disabled={disabled}
-              className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
-            >
-              <Send size={16} className="text-olive group-hover:text-charcoal" style={{color: '#C6D86E'}} />
-            </button>
+            {isStreaming ? (
+              <button 
+                onClick={handleStop}
+                className="w-full h-full flex items-center justify-center hover:bg-red-500 hover:shadow-red-500/20 transition-all duration-200 rounded-full group"
+                title="Stop generating"
+              >
+                <Square size={14} className="text-red-400 group-hover:text-white fill-current" />
+              </button>
+            ) : (
+              <button 
+                onClick={handleSend}
+                disabled={disabled || !message.trim()}
+                className="w-full h-full flex items-center justify-center hover:bg-olive hover:shadow-olive-glow transition-all duration-200 rounded-full group disabled:opacity-50 disabled:hover:bg-charcoal disabled:hover:shadow-none"
+                title="Send message"
+              >
+                <Send size={16} className="text-olive group-hover:text-charcoal" style={{color: '#C6D86E'}} />
+              </button>
+            )}
           </div>
         </div>
       </div>

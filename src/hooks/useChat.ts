@@ -22,6 +22,8 @@ export const useChat = () => {
   const [chatHistory, setChatHistory] = useState<Chat[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   // Load chat history from API
   const loadChatHistory = useCallback(async () => {
@@ -36,11 +38,28 @@ export const useChat = () => {
     }
   }, []);
 
+  // Stop streaming generation
+  const stopGeneration = useCallback(() => {
+    if (abortController) {
+      console.log('⏹️ [DEBUG] Stopping generation...');
+      abortController.abort();
+      setAbortController(null);
+      setIsStreaming(false);
+      setIsLoading(false);
+    }
+  }, [abortController]);
+
   // Handle streaming response from AI
   const handleStreamingResponse = useCallback(async (chatId: string, message: string) => {
     console.log('🚀 [DEBUG] Starting streaming response for:', { chatId, message });
+    
+    // Create new abort controller for this request
+    const controller = new AbortController();
+    setAbortController(controller);
+    setIsStreaming(true);
+    
     try {
-      const response = await apiService.sendStreamingMessage(chatId, message);
+      const response = await apiService.sendStreamingMessage(chatId, message, controller.signal);
       console.log('📡 [DEBUG] Streaming response received:', { status: response.status, headers: response.headers });
       const reader = response.body?.getReader();
       
@@ -74,6 +93,24 @@ export const useChat = () => {
       let buffer = '';
       
       while (true) {
+        // Check if streaming was aborted
+        if (controller.signal.aborted) {
+          console.log('⏹️ [DEBUG] Streaming aborted by user');
+          streamingMessage.content += '\n\n_[Generation stopped by user]_';
+          streamingMessage.isStreaming = false;
+          
+          setCurrentChat(prev => {
+            if (!prev) return null;
+            const messages = [...(Array.isArray(prev.messages) ? prev.messages : [])];
+            const lastIndex = messages.length - 1;
+            if (messages[lastIndex]?.id === streamingMessage.id) {
+              messages[lastIndex] = { ...streamingMessage };
+            }
+            return { ...prev, messages };
+          });
+          break;
+        }
+        
         const { done, value } = await reader.read();
         
         if (done) break;
@@ -152,6 +189,13 @@ export const useChat = () => {
       }
     } catch (err) {
       console.error('❌ [ERROR] Streaming error:', err);
+      
+      // Check if it was an abort error
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.log('⏹️ [DEBUG] Streaming was aborted');
+        return; // Don't fallback if user stopped generation
+      }
+      
       console.log('🔄 [DEBUG] Falling back to regular message sending');
       // Fallback to regular message sending
       const response = await apiService.sendMessage(chatId, message, false);
@@ -292,6 +336,8 @@ export const useChat = () => {
       console.error('Error sending message:', err);
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
+      setAbortController(null);
     }
   }, [currentChat, createNewChat, handleStreamingResponse]);
 
@@ -338,8 +384,10 @@ export const useChat = () => {
     currentChat,
     chatHistory,
     isLoading,
+    isStreaming,
     error,
     sendMessage,
+    stopGeneration,
     createNewChat,
     loadChat,
     clearChat,

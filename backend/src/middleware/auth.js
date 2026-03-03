@@ -8,7 +8,7 @@ export const generateToken = (userId) => {
   return jwt.sign(
     { userId },
     process.env.JWT_SECRET,
-    { 
+    {
       expiresIn: process.env.JWT_EXPIRE || '7d',
       issuer: 'aurevia-backend',
       audience: 'aurevia-frontend'
@@ -32,9 +32,8 @@ export const verifyToken = (token) => {
  */
 export const authenticate = async (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.header('Authorization');
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
         success: false,
@@ -43,14 +42,12 @@ export const authenticate = async (req, res, next) => {
       });
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-    // Verify token
+    const token = authHeader.substring(7);
     const decoded = verifyToken(token);
-    
+
     // Get user from database
-    const user = await User.findById(decoded.userId).select('-password');
-    
+    const user = await User.findById(decoded.userId);
+
     if (!user) {
       return res.status(401).json({
         success: false,
@@ -59,7 +56,7 @@ export const authenticate = async (req, res, next) => {
       });
     }
 
-    if (!user.isActive) {
+    if (!user.is_active) {
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated.',
@@ -67,7 +64,6 @@ export const authenticate = async (req, res, next) => {
       });
     }
 
-    // Attach user to request object
     req.user = user;
     next();
   } catch (error) {
@@ -102,22 +98,21 @@ export const authenticate = async (req, res, next) => {
 export const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.header('Authorization');
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next(); // Continue without user
+      return next();
     }
 
     const token = authHeader.substring(7);
     const decoded = verifyToken(token);
-    const user = await User.findById(decoded.userId).select('-password');
-    
-    if (user && user.isActive) {
+    const user = await User.findById(decoded.userId);
+
+    if (user && user.is_active) {
       req.user = user;
     }
-    
+
     next();
   } catch (error) {
-    // Ignore errors and continue without user
     next();
   }
 };
@@ -156,7 +151,6 @@ export const authRateLimit = (maxAttempts = 5, windowMinutes = 15) => {
     const now = Date.now();
     const windowMs = windowMinutes * 60 * 1000;
 
-    // Clean old attempts
     for (const [key, data] of attempts.entries()) {
       if (now - data.firstAttempt > windowMs) {
         attempts.delete(key);

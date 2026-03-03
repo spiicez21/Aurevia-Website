@@ -6,10 +6,10 @@ import dotenv from 'dotenv';
 
 // Import services and middleware
 import { databaseService } from './services/index.js';
-import { 
-  apiRateLimit, 
-  errorHandler, 
-  notFoundHandler 
+import {
+  apiRateLimit,
+  errorHandler,
+  notFoundHandler
 } from './middleware/index.js';
 
 // Import routes
@@ -40,10 +40,10 @@ const corsOptions = {
       'http://localhost:3000',
       'http://localhost:5173'
     ];
-    
+
     // Allow requests with no origin (mobile apps, etc.)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -103,17 +103,17 @@ app.use(errorHandler);
 // Graceful shutdown handling
 const gracefulShutdown = async (signal) => {
   console.log(`\n🔄 Received ${signal}. Starting graceful shutdown...`);
-  
+
   try {
     // Close database connection
     await databaseService.disconnect();
-    
+
     // Close server
     server.close(() => {
       console.log('✅ Server closed successfully');
       process.exit(0);
     });
-    
+
     // Force close after 10 seconds
     setTimeout(() => {
       console.log('⚠️ Forcing shutdown...');
@@ -149,7 +149,7 @@ const startServer = async () => {
   try {
     // Connect to database
     await databaseService.connect();
-    
+
     // Start HTTP server
     server = app.listen(PORT, () => {
       console.log(`
@@ -173,12 +173,12 @@ const startServer = async () => {
    • Model: ${process.env.OLLAMA_MODEL || 'gemma2:2b'}
 
 📊 Database:
-   • MongoDB: ${process.env.MONGODB_URI || 'mongodb://localhost:27017/aurevia-chat'}
+   • Neon PostgreSQL: Connected
 
 Ready to handle requests! 🎉
       `);
     });
-    
+
     // Handle server errors
     server.on('error', (error) => {
       if (error.code === 'EADDRINUSE') {
@@ -188,7 +188,7 @@ Ready to handle requests! 🎉
       }
       process.exit(1);
     });
-    
+
   } catch (error) {
     console.error('❌ Failed to start server:', error);
     process.exit(1);

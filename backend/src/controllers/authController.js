@@ -13,13 +13,13 @@ export const register = [
     .withMessage('Username must be between 3 and 30 characters')
     .matches(/^[a-zA-Z0-9_]+$/)
     .withMessage('Username can only contain letters, numbers, and underscores'),
-  
+
   body('email')
     .trim()
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email address'),
-  
+
   body('password')
     .isLength({ min: 6 })
     .withMessage('Password must be at least 6 characters long')
@@ -28,7 +28,6 @@ export const register = [
 
   // Controller function
   asyncHandler(async (req, res) => {
-    // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -42,12 +41,10 @@ export const register = [
     const { username, email, password } = req.body;
 
     // Check if user already exists
-    const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
-    });
+    const existingUser = await User.findByEmailOrUsername(email, username);
 
     if (existingUser) {
-      const field = existingUser.email === email ? 'email' : 'username';
+      const field = existingUser.email === email.trim().toLowerCase() ? 'email' : 'username';
       return res.status(409).json({
         success: false,
         message: `User with this ${field} already exists`,
@@ -57,25 +54,16 @@ export const register = [
     }
 
     // Create new user
-    const user = new User({
-      username,
-      email,
-      password
-    });
-
-    await user.save();
+    const user = await User.create({ username, email, password });
 
     // Generate token
-    const token = generateToken(user._id);
-
-    // Return user data (without password)
-    const userData = user.getPublicProfile();
+    const token = generateToken(user.id);
 
     res.status(201).json({
       success: true,
       message: 'User registered successfully',
       data: {
-        user: userData,
+        user,
         token
       }
     });
@@ -86,20 +74,17 @@ export const register = [
  * Login user
  */
 export const login = [
-  // Validation rules
   body('email')
     .trim()
     .isEmail()
     .normalizeEmail()
     .withMessage('Please provide a valid email address'),
-  
+
   body('password')
     .notEmpty()
     .withMessage('Password is required'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
-    // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -112,8 +97,8 @@ export const login = [
 
     const { email, password } = req.body;
 
-    // Find user and include password for comparison
-    const user = await User.findOne({ email }).select('+password');
+    // Find user with password
+    const user = await User.findByEmailWithPassword(email);
 
     if (!user) {
       return res.status(401).json({
@@ -123,8 +108,7 @@ export const login = [
       });
     }
 
-    // Check if account is active
-    if (!user.isActive) {
+    if (!user.is_active) {
       return res.status(401).json({
         success: false,
         message: 'Account is deactivated',
@@ -133,7 +117,7 @@ export const login = [
     }
 
     // Compare password
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = await User.comparePassword(password, user.password);
 
     if (!isPasswordValid) {
       return res.status(401).json({
@@ -144,14 +128,13 @@ export const login = [
     }
 
     // Update last seen
-    user.lastSeen = new Date();
-    await user.save();
+    await User.updateById(user.id, { last_seen: new Date() });
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(user.id);
 
-    // Return user data (without password)
-    const userData = user.getPublicProfile();
+    // Return without password
+    const userData = User.getPublicProfile(user);
 
     res.json({
       success: true,
@@ -168,8 +151,8 @@ export const login = [
  * Get current user profile
  */
 export const getProfile = asyncHandler(async (req, res) => {
-  const userData = req.user.getPublicProfile();
-  
+  const userData = User.getPublicProfile(req.user);
+
   res.json({
     success: true,
     data: {
@@ -182,7 +165,6 @@ export const getProfile = asyncHandler(async (req, res) => {
  * Update user profile
  */
 export const updateProfile = [
-  // Validation rules
   body('username')
     .optional()
     .trim()
@@ -190,20 +172,18 @@ export const updateProfile = [
     .withMessage('Username must be between 3 and 30 characters')
     .matches(/^[a-zA-Z0-9_]+$/)
     .withMessage('Username can only contain letters, numbers, and underscores'),
-  
+
   body('preferences.theme')
     .optional()
     .isIn(['light', 'dark', 'auto'])
     .withMessage('Theme must be light, dark, or auto'),
-  
+
   body('preferences.language')
     .optional()
     .isLength({ min: 2, max: 5 })
     .withMessage('Language code must be between 2 and 5 characters'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
-    // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -215,11 +195,11 @@ export const updateProfile = [
     }
 
     const { username, preferences } = req.body;
-    const user = req.user;
+    const updates = {};
 
-    // Check if username is being changed and if it's available
-    if (username && username !== user.username) {
-      const existingUser = await User.findOne({ username });
+    // Check if username is being changed
+    if (username && username !== req.user.username) {
+      const existingUser = await User.findByUsername(username);
       if (existingUser) {
         return res.status(409).json({
           success: false,
@@ -227,23 +207,21 @@ export const updateProfile = [
           code: 'USERNAME_EXISTS'
         });
       }
-      user.username = username;
+      updates.username = username;
     }
 
-    // Update preferences
+    // Merge preferences
     if (preferences) {
-      user.preferences = { ...user.preferences, ...preferences };
+      updates.preferences = { ...req.user.preferences, ...preferences };
     }
 
-    await user.save();
-
-    const userData = user.getPublicProfile();
+    const updatedUser = await User.updateById(req.user.id, updates);
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
       data: {
-        user: userData
+        user: updatedUser
       }
     });
   })
@@ -253,20 +231,17 @@ export const updateProfile = [
  * Change password
  */
 export const changePassword = [
-  // Validation rules
   body('currentPassword')
     .notEmpty()
     .withMessage('Current password is required'),
-  
+
   body('newPassword')
     .isLength({ min: 6 })
     .withMessage('New password must be at least 6 characters long')
     .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
     .withMessage('New password must contain at least one lowercase letter, one uppercase letter, and one number'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
-    // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -278,13 +253,13 @@ export const changePassword = [
     }
 
     const { currentPassword, newPassword } = req.body;
-    
+
     // Get user with password
-    const user = await User.findById(req.user._id).select('+password');
+    const user = await User.findByIdWithPassword(req.user.id);
 
     // Verify current password
-    const isCurrentPasswordValid = await user.comparePassword(currentPassword);
-    
+    const isCurrentPasswordValid = await User.comparePassword(currentPassword, user.password);
+
     if (!isCurrentPasswordValid) {
       return res.status(401).json({
         success: false,
@@ -294,8 +269,7 @@ export const changePassword = [
     }
 
     // Update password
-    user.password = newPassword;
-    await user.save();
+    await User.updateById(req.user.id, { password: newPassword });
 
     res.json({
       success: true,
@@ -308,9 +282,7 @@ export const changePassword = [
  * Deactivate account
  */
 export const deactivateAccount = asyncHandler(async (req, res) => {
-  const user = req.user;
-  user.isActive = false;
-  await user.save();
+  await User.updateById(req.user.id, { is_active: false });
 
   res.json({
     success: true,

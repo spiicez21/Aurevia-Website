@@ -1,181 +1,98 @@
-import mongoose from 'mongoose';
+import { query } from '../db.js';
 
-const messageSchema = new mongoose.Schema({
-  chat: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Chat',
-    required: [true, 'Chat is required'],
-    index: true
+const Message = {
+  /**
+   * Create a new message
+   */
+  async create({ chat_id, user_id, content, role, is_guest, status, metadata, type }) {
+    const result = await query(
+      `INSERT INTO messages (chat_id, user_id, content, role, is_guest, status, metadata, type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [
+        chat_id,
+        user_id,
+        content || '',
+        role,
+        is_guest || false,
+        status || 'completed',
+        JSON.stringify(metadata || {}),
+        type || 'text'
+      ]
+    );
+    return result.rows[0];
   },
-  user: {
-    type: mongoose.Schema.Types.Mixed, // Can be ObjectId or string for guests
-    required: [true, 'User is required'],
-    index: true
+
+  /**
+   * Find message by ID
+   */
+  async findById(id) {
+    const result = await query(`SELECT * FROM messages WHERE id = $1`, [id]);
+    return result.rows[0] || null;
   },
-  isGuest: {
-    type: Boolean,
-    default: false
+
+  /**
+   * Get conversation context (recent messages for AI)
+   */
+  async getConversationContext(chatId, limit = 10) {
+    const result = await query(
+      `SELECT content, role, created_at FROM messages
+       WHERE chat_id = $1
+       ORDER BY created_at DESC LIMIT $2`,
+      [chatId, limit]
+    );
+    return result.rows;
   },
-  content: {
-    type: String,
-    required: function() {
-      // Allow empty content for processing messages (streaming)
-      return this.status !== 'processing';
-    },
-    trim: true,
-    maxLength: [10000, 'Message cannot exceed 10000 characters'],
-    default: ''
+
+  /**
+   * Get messages for a chat (chronological)
+   */
+  async findByChatId(chatId, limit = 50) {
+    const result = await query(
+      `SELECT * FROM messages WHERE chat_id = $1
+       ORDER BY created_at ASC LIMIT $2`,
+      [chatId, limit]
+    );
+    return result.rows;
   },
-  role: {
-    type: String,
-    enum: ['user', 'assistant', 'system'],
-    required: [true, 'Message role is required'],
-    index: true
-  },
-  type: {
-    type: String,
-    enum: ['text', 'image', 'file', 'code'],
-    default: 'text'
-  },
-  metadata: {
-    model: {
-      type: String,
-      default: 'gemma2:2b'
-    },
-    tokens: {
-      prompt: { type: Number, default: 0 },
-      completion: { type: Number, default: 0 },
-      total: { type: Number, default: 0 }
-    },
-    processingTime: {
-      type: Number, // in milliseconds
-      default: 0
-    },
-    temperature: {
-      type: Number,
-      min: 0,
-      max: 1
-    },
-    error: {
-      type: String,
-      default: null
+
+  /**
+   * Update message content, status, and metadata
+   */
+  async updateById(id, updates) {
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (updates.content !== undefined) {
+      setClauses.push(`content = $${paramIndex++}`);
+      values.push(updates.content);
     }
-  },
-  status: {
-    type: String,
-    enum: ['pending', 'processing', 'completed', 'failed'],
-    default: 'completed'
-  },
-  isEdited: {
-    type: Boolean,
-    default: false
-  },
-  editHistory: [{
-    content: String,
-    editedAt: {
-      type: Date,
-      default: Date.now
+    if (updates.status !== undefined) {
+      setClauses.push(`status = $${paramIndex++}`);
+      values.push(updates.status);
     }
-  }],
-  reactions: [{
-    emoji: {
-      type: String,
-      required: true
-    },
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
-      required: true
-    },
-    createdAt: {
-      type: Date,
-      default: Date.now
+    if (updates.metadata !== undefined) {
+      setClauses.push(`metadata = $${paramIndex++}`);
+      values.push(JSON.stringify(updates.metadata));
     }
-  }]
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
+    if (updates.is_edited !== undefined) {
+      setClauses.push(`is_edited = $${paramIndex++}`);
+      values.push(updates.is_edited);
+    }
 
-// Indexes for efficient queries
-messageSchema.index({ chat: 1, createdAt: -1 });
-messageSchema.index({ user: 1, createdAt: -1 });
-messageSchema.index({ chat: 1, role: 1 });
-messageSchema.index({ status: 1 });
+    if (setClauses.length === 0) return null;
 
-// Virtual for word count
-messageSchema.virtual('wordCount').get(function() {
-  return this.content ? this.content.split(/\s+/).length : 0;
-});
+    setClauses.push(`updated_at = NOW()`);
+    values.push(id);
 
-// Virtual for character count
-messageSchema.virtual('charCount').get(function() {
-  return this.content ? this.content.length : 0;
-});
-
-// Update chat's message count and last message time after saving
-messageSchema.post('save', async function() {
-  try {
-    const Chat = mongoose.model('Chat');
-    await Chat.findByIdAndUpdate(this.chat, {
-      $inc: { messageCount: 1 },
-      $set: { lastMessageAt: this.createdAt }
-    });
-  } catch (error) {
-    console.error('Error updating chat after message save:', error);
+    const result = await query(
+      `UPDATE messages SET ${setClauses.join(', ')} WHERE id = $${paramIndex}
+       RETURNING *`,
+      values
+    );
+    return result.rows[0] || null;
   }
-});
-
-// Update chat's message count after deletion
-messageSchema.post('deleteOne', { document: true }, async function() {
-  try {
-    const Chat = mongoose.model('Chat');
-    await Chat.findByIdAndUpdate(this.chat, {
-      $inc: { messageCount: -1 }
-    });
-  } catch (error) {
-    console.error('Error updating chat after message deletion:', error);
-  }
-});
-
-// Instance method to add reaction
-messageSchema.methods.addReaction = function(emoji, userId) {
-  // Remove existing reaction from this user
-  this.reactions = this.reactions.filter(
-    reaction => reaction.user.toString() !== userId.toString()
-  );
-  
-  // Add new reaction
-  this.reactions.push({ emoji, user: userId });
-  return this.save();
 };
-
-// Instance method to remove reaction
-messageSchema.methods.removeReaction = function(userId) {
-  this.reactions = this.reactions.filter(
-    reaction => reaction.user.toString() !== userId.toString()
-  );
-  return this.save();
-};
-
-// Static method to get conversation context
-messageSchema.statics.getConversationContext = function(chatId, limit = 10) {
-  return this.find({ chat: chatId })
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .select('content role createdAt')
-    .lean();
-};
-
-// Static method to get user's recent messages
-messageSchema.statics.getUserRecentMessages = function(userId, limit = 20) {
-  return this.find({ user: userId })
-    .populate('chat', 'title')
-    .sort({ createdAt: -1 })
-    .limit(limit);
-};
-
-const Message = mongoose.model('Message', messageSchema);
 
 export default Message;

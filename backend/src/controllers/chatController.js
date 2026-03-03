@@ -1,5 +1,5 @@
-import { body, param, query, validationResult } from 'express-validator';
-import { Chat, Message, User } from '../models/index.js';
+import { body, param, query as validateQuery, validationResult } from 'express-validator';
+import { Chat, Message } from '../models/index.js';
 import { ollamaService } from '../services/index.js';
 import { asyncHandler } from '../middleware/index.js';
 import { v4 as uuidv4 } from 'uuid';
@@ -8,31 +8,28 @@ import { v4 as uuidv4 } from 'uuid';
  * Create new chat
  */
 export const createChat = [
-  // Validation rules
   body('title')
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Title must be between 1 and 100 characters'),
-  
+
   body('description')
     .optional()
     .trim()
     .isLength({ max: 500 })
     .withMessage('Description cannot exceed 500 characters'),
-  
+
   body('settings.temperature')
     .optional()
     .isFloat({ min: 0, max: 1 })
     .withMessage('Temperature must be between 0 and 1'),
-  
+
   body('settings.maxTokens')
     .optional()
     .isInt({ min: 1, max: 4096 })
     .withMessage('Max tokens must be between 1 and 4096'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
-    // Check validation results
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
@@ -46,39 +43,37 @@ export const createChat = [
     const { title, description, settings } = req.body;
 
     // Handle both authenticated and anonymous users
-    let userId = req.user?._id;
-    
+    let userId = req.user?.id;
+    let isGuest = false;
+    let guestId = null;
+
     if (!userId) {
-      // Create or find guest user
-      let guestId = req.headers['x-guest-id'];
+      guestId = req.headers['x-guest-id'];
       if (!guestId) {
         guestId = `guest_${uuidv4()}`;
       }
-      
-      // For anonymous users, use a special guest identifier
       userId = guestId;
+      isGuest = true;
     }
 
-    const chat = new Chat({
-      user: userId,
+    const chat = await Chat.create({
+      user_id: userId,
       title,
       description,
-      isGuest: !req.user,
-      guestId: !req.user ? userId : undefined,
+      is_guest: isGuest,
+      guest_id: isGuest ? guestId : null,
       settings: {
         ...settings,
         model: 'gemma2:2b'
       }
     });
 
-    await chat.save();
-
     res.status(201).json({
       success: true,
       message: 'Chat created successfully',
       data: {
         chat,
-        ...(chat.isGuest && { guestId: chat.guestId })
+        ...(isGuest && { guestId })
       }
     });
   })
@@ -88,18 +83,16 @@ export const createChat = [
  * Get user's chats
  */
 export const getChats = [
-  // Validation rules
-  query('limit')
+  validateQuery('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('Limit must be between 1 and 100'),
-  
-  query('pinned')
+
+  validateQuery('pinned')
     .optional()
     .isBoolean()
     .withMessage('Pinned must be a boolean'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -117,10 +110,9 @@ export const getChats = [
       ...(pinned !== undefined && { pinned: pinned === 'true' })
     };
 
-    // Handle both authenticated and anonymous users
-    let userId = req.user?._id;
+    let userId = req.user?.id;
     let isGuest = false;
-    
+
     if (!userId) {
       const guestId = req.headers['x-guest-id'];
       if (!guestId) {
@@ -136,8 +128,8 @@ export const getChats = [
       isGuest = true;
     }
 
-    const chats = isGuest 
-      ? await Chat.find({ guestId: userId, isActive: true }).sort({ updatedAt: -1 }).limit(options.limit)
+    const chats = isGuest
+      ? await Chat.findGuestChats(userId, options)
       : await Chat.findUserChats(userId, options);
 
     res.json({
@@ -154,17 +146,15 @@ export const getChats = [
  * Get single chat with messages
  */
 export const getChat = [
-  // Validation rules
   param('chatId')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid chat ID'),
-  
-  query('messageLimit')
+
+  validateQuery('messageLimit')
     .optional()
     .isInt({ min: 1, max: 200 })
     .withMessage('Message limit must be between 1 and 200'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -179,10 +169,9 @@ export const getChat = [
     const { chatId } = req.params;
     const { messageLimit } = req.query;
 
-    // Handle both authenticated and anonymous users
-    let userId = req.user?._id;
+    let userId = req.user?.id;
     let isGuest = false;
-    
+
     if (!userId) {
       const guestId = req.headers['x-guest-id'];
       if (!guestId) {
@@ -196,19 +185,9 @@ export const getChat = [
       isGuest = true;
     }
 
-    const chat = isGuest
-      ? await Chat.findOne({ _id: chatId, guestId: userId, isActive: true }).populate({
-          path: 'messages',
-          options: { 
-            sort: { createdAt: -1 },
-            limit: parseInt(messageLimit) || 50
-          }
-        })
-      : await Chat.findChatWithMessages(
-          chatId, 
-          userId, 
-          parseInt(messageLimit) || 50
-        );
+    const chat = await Chat.findChatWithMessages(
+      chatId, userId, parseInt(messageLimit) || 50, isGuest
+    );
 
     if (!chat) {
       return res.status(404).json({
@@ -216,11 +195,6 @@ export const getChat = [
         message: 'Chat not found',
         code: 'CHAT_NOT_FOUND'
       });
-    }
-
-    // Reverse messages to show chronological order
-    if (chat.messages) {
-      chat.messages.reverse();
     }
 
     res.json({
@@ -236,22 +210,20 @@ export const getChat = [
  * Send message to chat
  */
 export const sendMessage = [
-  // Validation rules
   param('chatId')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid chat ID'),
-  
+
   body('content')
     .trim()
     .isLength({ min: 1, max: 10000 })
     .withMessage('Message content must be between 1 and 10000 characters'),
-  
+
   body('stream')
     .optional()
     .isBoolean()
     .withMessage('Stream must be a boolean'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -266,10 +238,9 @@ export const sendMessage = [
     const { chatId } = req.params;
     const { content, stream = false } = req.body;
 
-    // Handle both authenticated and anonymous users
-    let userId = req.user?._id;
+    let userId = req.user?.id;
     let isGuest = false;
-    
+
     if (!userId) {
       const guestId = req.headers['x-guest-id'];
       if (!guestId) {
@@ -285,8 +256,8 @@ export const sendMessage = [
 
     // Verify chat exists and belongs to user/guest
     const chat = isGuest
-      ? await Chat.findOne({ _id: chatId, guestId: userId, isActive: true })
-      : await Chat.findOne({ _id: chatId, user: userId, isActive: true });
+      ? await Chat.findByIdAndGuest(chatId, userId)
+      : await Chat.findByIdAndUser(chatId, userId);
 
     if (!chat) {
       return res.status(404).json({
@@ -297,20 +268,21 @@ export const sendMessage = [
     }
 
     // Create user message
-    const userMessage = new Message({
-      chat: chatId,
-      user: userId,
+    const userMessage = await Message.create({
+      chat_id: chatId,
+      user_id: userId,
       content,
       role: 'user',
-      isGuest: isGuest
+      is_guest: isGuest
     });
 
-    await userMessage.save();
+    // Increment message count
+    await Chat.incrementMessageCount(chatId);
 
     try {
       // Get conversation context
       const conversationHistory = await Message.getConversationContext(chatId, 10);
-      
+
       // Format messages for Ollama
       const messages = conversationHistory
         .reverse()
@@ -318,6 +290,8 @@ export const sendMessage = [
           role: msg.role,
           content: msg.content
         }));
+
+      const chatSettings = chat.settings || {};
 
       if (stream) {
         // Set up Server-Sent Events
@@ -334,39 +308,38 @@ export const sendMessage = [
 
         try {
           // Create assistant message with pending status
-          const assistantMessage = new Message({
-            chat: chatId,
-            user: userId,
+          const assistantMessage = await Message.create({
+            chat_id: chatId,
+            user_id: userId,
             content: '',
             role: 'assistant',
             status: 'processing',
-            isGuest: isGuest,
+            is_guest: isGuest,
             metadata: {
-              model: chat.settings.model,
-              temperature: chat.settings.temperature
+              model: chatSettings.model || 'gemma2:2b',
+              temperature: chatSettings.temperature || 0.7
             }
           });
 
-          await assistantMessage.save();
+          await Chat.incrementMessageCount(chatId);
 
           // Send initial message info
           res.write(`data: ${JSON.stringify({
             type: 'message_start',
-            messageId: assistantMessage._id
+            messageId: assistantMessage.id
           })}\n\n`);
 
           // Generate streaming response
           const streamOptions = {
-            model: chat.settings.model,
-            temperature: chat.settings.temperature,
-            max_tokens: chat.settings.maxTokens,
-            system: chat.settings.systemPrompt
+            model: chatSettings.model || 'gemma2:2b',
+            temperature: chatSettings.temperature || 0.7,
+            max_tokens: chatSettings.maxTokens || 1024,
+            system: chatSettings.systemPrompt || 'You are a helpful AI assistant.'
           };
 
           for await (const chunk of ollamaService.generateStreamingCompletion(messages, streamOptions)) {
             assistantContent += chunk.content;
-            
-            // Send chunk to client
+
             res.write(`data: ${JSON.stringify({
               type: 'content_delta',
               delta: chunk.content
@@ -379,21 +352,25 @@ export const sendMessage = [
 
           // Update message with final content
           const processingTime = Date.now() - startTime;
-          assistantMessage.content = assistantContent;
-          assistantMessage.status = 'completed';
-          assistantMessage.metadata.processingTime = processingTime;
-          assistantMessage.metadata.tokens = {
-            prompt: ollamaService.estimateTokens(messages),
-            completion: ollamaService.estimateTokens(assistantContent),
-            total: ollamaService.estimateTokens(messages) + ollamaService.estimateTokens(assistantContent)
-          };
-
-          await assistantMessage.save();
+          await Message.updateById(assistantMessage.id, {
+            content: assistantContent,
+            status: 'completed',
+            metadata: {
+              model: chatSettings.model || 'gemma2:2b',
+              temperature: chatSettings.temperature || 0.7,
+              processingTime,
+              tokens: {
+                prompt: ollamaService.estimateTokens(messages),
+                completion: ollamaService.estimateTokens(assistantContent),
+                total: ollamaService.estimateTokens(messages) + ollamaService.estimateTokens(assistantContent)
+              }
+            }
+          });
 
           // Send completion event
           res.write(`data: ${JSON.stringify({
             type: 'message_complete',
-            messageId: assistantMessage._id,
+            messageId: assistantMessage.id,
             processingTime
           })}\n\n`);
 
@@ -409,21 +386,21 @@ export const sendMessage = [
       } else {
         // Non-streaming response
         const completionOptions = {
-          model: chat.settings.model,
-          temperature: chat.settings.temperature,
-          max_tokens: chat.settings.maxTokens,
-          system: chat.settings.systemPrompt
+          model: chatSettings.model || 'gemma2:2b',
+          temperature: chatSettings.temperature || 0.7,
+          max_tokens: chatSettings.maxTokens || 1024,
+          system: chatSettings.systemPrompt || 'You are a helpful AI assistant.'
         };
 
         const completion = await ollamaService.generateCompletion(messages, completionOptions);
 
         // Create assistant message
-        const assistantMessage = new Message({
-          chat: chatId,
-          user: userId,
+        const assistantMessage = await Message.create({
+          chat_id: chatId,
+          user_id: userId,
           content: completion.content,
           role: 'assistant',
-          isGuest: isGuest,
+          is_guest: isGuest,
           metadata: {
             model: completion.model,
             tokens: completion.usage,
@@ -432,7 +409,7 @@ export const sendMessage = [
           }
         });
 
-        await assistantMessage.save();
+        await Chat.incrementMessageCount(chatId);
 
         res.json({
           success: true,
@@ -445,21 +422,21 @@ export const sendMessage = [
       }
     } catch (error) {
       console.error('Message generation error:', error);
-      
+
       // Create error message
-      const errorMessage = new Message({
-        chat: chatId,
-        user: userId,
+      const errorMessage = await Message.create({
+        chat_id: chatId,
+        user_id: userId,
         content: 'Sorry, I encountered an error processing your message. Please try again.',
         role: 'assistant',
         status: 'failed',
-        isGuest: isGuest,
+        is_guest: isGuest,
         metadata: {
           error: error.message
         }
       });
 
-      await errorMessage.save();
+      await Chat.incrementMessageCount(chatId);
 
       if (stream) {
         res.write(`data: ${JSON.stringify({
@@ -486,23 +463,21 @@ export const sendMessage = [
  * Update chat settings
  */
 export const updateChat = [
-  // Validation rules
   param('chatId')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid chat ID'),
-  
+
   body('title')
     .optional()
     .trim()
     .isLength({ min: 1, max: 100 })
     .withMessage('Title must be between 1 and 100 characters'),
-  
+
   body('isPinned')
     .optional()
     .isBoolean()
     .withMessage('isPinned must be a boolean'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -515,13 +490,13 @@ export const updateChat = [
     }
 
     const { chatId } = req.params;
-    const updates = req.body;
+    const { title, isPinned } = req.body;
 
-    const chat = await Chat.findOneAndUpdate(
-      { _id: chatId, user: req.user._id, isActive: true },
-      updates,
-      { new: true }
-    );
+    const updates = {};
+    if (title !== undefined) updates.title = title;
+    if (isPinned !== undefined) updates.is_pinned = isPinned;
+
+    const chat = await Chat.updateById(chatId, req.user.id, updates);
 
     if (!chat) {
       return res.status(404).json({
@@ -545,12 +520,10 @@ export const updateChat = [
  * Delete chat
  */
 export const deleteChat = [
-  // Validation rules
   param('chatId')
-    .isMongoId()
+    .isUUID()
     .withMessage('Invalid chat ID'),
 
-  // Controller function
   asyncHandler(async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -564,11 +537,7 @@ export const deleteChat = [
 
     const { chatId } = req.params;
 
-    const chat = await Chat.findOneAndUpdate(
-      { _id: chatId, user: req.user._id, isActive: true },
-      { isActive: false },
-      { new: true }
-    );
+    const chat = await Chat.softDelete(chatId, req.user.id);
 
     if (!chat) {
       return res.status(404).json({

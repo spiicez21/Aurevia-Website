@@ -63,7 +63,7 @@ export const healthCheck = asyncHandler(async (req, res) => {
 export const getModels = asyncHandler(async (req, res) => {
   try {
     const models = await ollamaService.listModels();
-    
+
     res.json({
       success: true,
       data: models
@@ -94,7 +94,7 @@ export const pullModel = asyncHandler(async (req, res) => {
 
   try {
     const result = await ollamaService.pullModel(modelName);
-    
+
     res.json({
       success: true,
       message: `Model ${modelName} pulled successfully`,

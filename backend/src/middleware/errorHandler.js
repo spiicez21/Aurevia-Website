@@ -4,26 +4,13 @@
 export const errorHandler = (err, req, res, next) => {
   console.error('Error stack:', err.stack);
 
-  // Mongoose validation error
-  if (err.name === 'ValidationError') {
-    const errors = Object.values(err.errors).map(error => ({
-      field: error.path,
-      message: error.message
-    }));
-    
-    return res.status(400).json({
-      success: false,
-      message: 'Validation failed',
-      code: 'VALIDATION_ERROR',
-      errors
-    });
-  }
+  // PostgreSQL unique violation (duplicate key)
+  if (err.code === '23505') {
+    const detail = err.detail || '';
+    const match = detail.match(/Key \((\w+)\)=\((.+?)\)/);
+    const field = match ? match[1] : 'field';
+    const value = match ? match[2] : '';
 
-  // Mongoose duplicate key error
-  if (err.code === 11000) {
-    const field = Object.keys(err.keyValue)[0];
-    const value = err.keyValue[field];
-    
     return res.status(409).json({
       success: false,
       message: `${field} '${value}' already exists`,
@@ -32,12 +19,30 @@ export const errorHandler = (err, req, res, next) => {
     });
   }
 
-  // Mongoose cast error (invalid ObjectId)
-  if (err.name === 'CastError') {
+  // PostgreSQL foreign key violation
+  if (err.code === '23503') {
+    return res.status(400).json({
+      success: false,
+      message: 'Referenced record does not exist',
+      code: 'FK_VIOLATION'
+    });
+  }
+
+  // PostgreSQL invalid input syntax (e.g. bad UUID)
+  if (err.code === '22P02') {
     return res.status(400).json({
       success: false,
       message: 'Invalid ID format',
       code: 'INVALID_ID'
+    });
+  }
+
+  // PostgreSQL check constraint violation
+  if (err.code === '23514') {
+    return res.status(400).json({
+      success: false,
+      message: 'Validation failed',
+      code: 'VALIDATION_ERROR'
     });
   }
 

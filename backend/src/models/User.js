@@ -1,107 +1,152 @@
-import mongoose from 'mongoose';
 import bcrypt from 'bcryptjs';
+import { query } from '../db.js';
 
-const userSchema = new mongoose.Schema({
-  username: {
-    type: String,
-    required: [true, 'Username is required'],
-    unique: true,
-    trim: true,
-    minLength: [3, 'Username must be at least 3 characters'],
-    maxLength: [30, 'Username cannot exceed 30 characters']
-  },
-  email: {
-    type: String,
-    required: [true, 'Email is required'],
-    unique: true,
-    trim: true,
-    lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
-  },
-  password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minLength: [6, 'Password must be at least 6 characters'],
-    select: false // Don't include password in queries by default
-  },
-  avatar: {
-    type: String,
-    default: null
-  },
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  lastSeen: {
-    type: Date,
-    default: Date.now
-  },
-  preferences: {
-    theme: {
-      type: String,
-      enum: ['light', 'dark', 'auto'],
-      default: 'dark'
-    },
-    language: {
-      type: String,
-      default: 'en'
-    },
-    notifications: {
-      type: Boolean,
-      default: true
-    }
-  }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-// Virtual for user's chats
-userSchema.virtual('chats', {
-  ref: 'Chat',
-  localField: '_id',
-  foreignField: 'user'
-});
-
-// Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
-  
-  try {
+const User = {
+  /**
+   * Create a new user with hashed password
+   */
+  async create({ username, email, password }) {
     const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    const result = await query(
+      `INSERT INTO users (username, email, password)
+       VALUES ($1, $2, $3)
+       RETURNING id, username, email, avatar, is_active, last_seen, preferences, created_at, updated_at`,
+      [username.trim(), email.trim().toLowerCase(), hashedPassword]
+    );
+    return result.rows[0];
+  },
+
+  /**
+   * Find user by ID (without password)
+   */
+  async findById(id) {
+    const result = await query(
+      `SELECT id, username, email, avatar, is_active, last_seen, preferences, created_at, updated_at
+       FROM users WHERE id = $1`,
+      [id]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Find user by ID including password (for auth)
+   */
+  async findByIdWithPassword(id) {
+    const result = await query(
+      `SELECT * FROM users WHERE id = $1`,
+      [id]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Find user by email (without password)
+   */
+  async findByEmail(email) {
+    const result = await query(
+      `SELECT id, username, email, avatar, is_active, last_seen, preferences, created_at, updated_at
+       FROM users WHERE email = $1`,
+      [email.trim().toLowerCase()]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Find user by email with password (for login)
+   */
+  async findByEmailWithPassword(email) {
+    const result = await query(
+      `SELECT * FROM users WHERE email = $1`,
+      [email.trim().toLowerCase()]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Find user by email or username (for duplicate checking)
+   */
+  async findByEmailOrUsername(email, username) {
+    const result = await query(
+      `SELECT id, email, username FROM users WHERE email = $1 OR username = $2 LIMIT 1`,
+      [email.trim().toLowerCase(), username.trim()]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Find user by username
+   */
+  async findByUsername(username) {
+    const result = await query(
+      `SELECT id, username FROM users WHERE username = $1`,
+      [username.trim()]
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Update user by ID
+   */
+  async updateById(id, updates) {
+    const setClauses = [];
+    const values = [];
+    let paramIndex = 1;
+
+    if (updates.username !== undefined) {
+      setClauses.push(`username = $${paramIndex++}`);
+      values.push(updates.username.trim());
+    }
+    if (updates.avatar !== undefined) {
+      setClauses.push(`avatar = $${paramIndex++}`);
+      values.push(updates.avatar);
+    }
+    if (updates.is_active !== undefined) {
+      setClauses.push(`is_active = $${paramIndex++}`);
+      values.push(updates.is_active);
+    }
+    if (updates.last_seen !== undefined) {
+      setClauses.push(`last_seen = $${paramIndex++}`);
+      values.push(updates.last_seen);
+    }
+    if (updates.preferences !== undefined) {
+      setClauses.push(`preferences = $${paramIndex++}`);
+      values.push(JSON.stringify(updates.preferences));
+    }
+    if (updates.password !== undefined) {
+      const salt = await bcrypt.genSalt(12);
+      const hashed = await bcrypt.hash(updates.password, salt);
+      setClauses.push(`password = $${paramIndex++}`);
+      values.push(hashed);
+    }
+
+    setClauses.push(`updated_at = NOW()`);
+    values.push(id);
+
+    const result = await query(
+      `UPDATE users SET ${setClauses.join(', ')} WHERE id = $${paramIndex}
+       RETURNING id, username, email, avatar, is_active, last_seen, preferences, created_at, updated_at`,
+      values
+    );
+    return result.rows[0] || null;
+  },
+
+  /**
+   * Compare password against hash
+   */
+  async comparePassword(candidatePassword, hashedPassword) {
+    return bcrypt.compare(candidatePassword, hashedPassword);
+  },
+
+  /**
+   * Strip password from user object
+   */
+  getPublicProfile(user) {
+    if (!user) return null;
+    const { password, ...publicUser } = user;
+    return publicUser;
   }
-});
-
-// Update lastSeen before saving
-userSchema.pre('save', function(next) {
-  if (this.isModified() && !this.isNew) {
-    this.lastSeen = new Date();
-  }
-  next();
-});
-
-// Instance method to check password
-userSchema.methods.comparePassword = async function(candidatePassword) {
-  return await bcrypt.compare(candidatePassword, this.password);
 };
-
-// Instance method to get public profile
-userSchema.methods.getPublicProfile = function() {
-  const userObject = this.toObject();
-  delete userObject.password;
-  return userObject;
-};
-
-// Static method to find active users
-userSchema.statics.findActive = function() {
-  return this.find({ isActive: true });
-};
-
-const User = mongoose.model('User', userSchema);
 
 export default User;

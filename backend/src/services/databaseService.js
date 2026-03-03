@@ -1,65 +1,52 @@
-import mongoose from 'mongoose';
+import { pool } from '../db.js';
+import initSchema from '../db/initSchema.js';
 
 class DatabaseService {
   constructor() {
-    this.connection = null;
+    this.connected = false;
   }
 
   /**
-   * Connect to MongoDB database
+   * Connect to Neon PostgreSQL and initialize schema
    */
   async connect() {
     try {
-      const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/aurevia-chat';
-      console.log(`🔌 Attempting to connect to MongoDB: ${mongoURI}`);
-      
-      const options = {
-        maxPoolSize: 10,
-        serverSelectionTimeoutMS: 5000,
-        socketTimeoutMS: 45000,
-        bufferCommands: false,
-      };
+      const dbUrl = process.env.DATABASE_URL || '';
+      const host = dbUrl.includes('@') ? dbUrl.split('@')[1]?.split('/')[0] : 'unknown';
+      console.log(`🔌 Attempting to connect to Neon PostgreSQL: ${host}`);
 
-      console.log('🔧 MongoDB connection options:', options);
-      this.connection = await mongoose.connect(mongoURI, options);
-      
-      console.log(`✅ Connected to MongoDB: ${this.connection.connection.host}`);
-      console.log(`📊 Database: ${this.connection.connection.name}`);
-      
-      // Handle connection events
-      mongoose.connection.on('error', (error) => {
-        console.error('❌ MongoDB connection error:', error);
-      });
+      // Test connection
+      const client = await pool.connect();
+      const result = await client.query('SELECT NOW() as now, current_database() as db');
+      client.release();
 
-      mongoose.connection.on('disconnected', () => {
-        console.warn('⚠️ MongoDB disconnected');
-      });
+      this.connected = true;
+      console.log(`✅ Connected to Neon PostgreSQL`);
+      console.log(`📊 Database: ${result.rows[0].db}`);
+      console.log(`🕐 Server time: ${result.rows[0].now}`);
 
-      mongoose.connection.on('reconnected', () => {
-        console.log('✅ MongoDB reconnected');
-      });
+      // Initialize schema
+      await initSchema();
 
-      return this.connection;
+      return true;
     } catch (error) {
-      console.error('❌ Failed to connect to MongoDB:');
-      console.error('   Error name:', error.name);
-      console.error('   Error message:', error.message);
-      if (error.code) {
-        console.error('   Error code:', error.code);
-      }
+      console.error('❌ Failed to connect to Neon PostgreSQL:');
+      console.error('   Error:', error.message);
+      this.connected = false;
       throw error;
     }
   }
 
   /**
-   * Disconnect from MongoDB
+   * Disconnect from PostgreSQL
    */
   async disconnect() {
     try {
-      await mongoose.disconnect();
-      console.log('✅ Disconnected from MongoDB');
+      await pool.end();
+      this.connected = false;
+      console.log('✅ Disconnected from Neon PostgreSQL');
     } catch (error) {
-      console.error('❌ Error disconnecting from MongoDB:', error);
+      console.error('❌ Error disconnecting from Neon PostgreSQL:', error);
     }
   }
 
@@ -67,25 +54,17 @@ class DatabaseService {
    * Check database connection health
    */
   isConnected() {
-    return mongoose.connection.readyState === 1;
+    return this.connected;
   }
 
   /**
    * Get connection status
    */
   getConnectionStatus() {
-    const states = {
-      0: 'disconnected',
-      1: 'connected',
-      2: 'connecting',
-      3: 'disconnecting'
-    };
-    
     return {
-      state: states[mongoose.connection.readyState],
-      host: mongoose.connection.host,
-      port: mongoose.connection.port,
-      name: mongoose.connection.name
+      state: this.connected ? 'connected' : 'disconnected',
+      type: 'postgresql',
+      provider: 'neon'
     };
   }
 }

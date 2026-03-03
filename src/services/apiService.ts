@@ -37,7 +37,7 @@ class ApiService {
   // Make authenticated API request
   private async request(endpoint: string, options: RequestInit = {}) {
     const url = `${this.baseURL}${endpoint}`;
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
@@ -75,11 +75,11 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(userData),
     });
-    
+
     if (response.data?.token) {
       this.setToken(response.data.token);
     }
-    
+
     return response;
   }
 
@@ -88,16 +88,30 @@ class ApiService {
       method: 'POST',
       body: JSON.stringify(credentials),
     });
-    
+
     if (response.data?.token) {
       this.setToken(response.data.token);
     }
-    
+
     return response;
   }
 
   async getProfile() {
     return this.request('/auth/profile');
+  }
+
+  async updateProfile(updates: { username?: string; preferences?: Record<string, unknown> }) {
+    return this.request('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async changePassword(currentPassword: string, newPassword: string) {
+    return this.request('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
   }
 
   // Chat endpoints
@@ -133,7 +147,7 @@ class ApiService {
   // Streaming message handler
   async sendStreamingMessage(chatId: string, message: string, signal?: AbortSignal) {
     const url = `${this.baseURL}/chats/${chatId}/messages`;
-    
+
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
     };
